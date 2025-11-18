@@ -1,0 +1,44 @@
+# Render Blueprint Configuration
+# This file can be used to automate service creation on Render
+# Note: You still need to set environment variables manually in the dashboard
+
+services:
+  - type: web
+    name: unideals-backend
+    env: node
+    region: oregon  # Change to your preferred region
+    plan: free  # Change to 'starter' or higher for production
+    buildCommand: npm install
+    startCommand: node server.js
+    rootDir: .  # Since this file is in BACKEND folder
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Database variables - set these in Render dashboard after creating database
+      # - key: DB_HOST
+      #   sync: false
+      # - key: DB_PORT
+      #   value: 5432
+      # - key: DB_NAME
+      #   sync: false
+      # - key: DB_USER
+      #   sync: false
+      # - key: DB_PASS
+      #   sync: false
+      # JWT and Email - set these in Render dashboard
+      # - key: JWT_SECRET
+      #   sync: false
+      # - key: EMAIL_USER
+      #   sync: false
+      # - key: EMAIL_PASS
+      #   sync: false
+
+databases:
+  - name: unideals-db
+    databaseName: unideals
+    user: unideals_user
+    plan: free  # Change to 'starter' or higher for production
+    region: oregon  # Should match web service region
+

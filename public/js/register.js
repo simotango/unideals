@@ -52,8 +52,21 @@ document.getElementById('student-register-form').addEventListener('submit', asyn
         
         const data = await response.json();
         if (data.success) {
-            showMessage(messageEl, data.message + ' Check server console for verification code.', 'success');
+            // Check if email was actually sent or if code is in logs
+            const message = data.message + ' If you don\'t receive an email, check Render logs for the verification code.';
+            showMessage(messageEl, message, 'success');
             document.getElementById('verify-section').style.display = 'block';
+            
+            // Show helpful note about checking logs if on Render
+            if (API_URL.includes('render.com') || API_URL.includes('onrender.com')) {
+                const logNote = document.createElement('div');
+                logNote.className = 'log-note';
+                logNote.style.cssText = 'margin-top: 10px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; font-size: 13px; color: #856404; line-height: 1.5;';
+                logNote.innerHTML = '📧 <strong>Email Status:</strong> If you don\'t receive an email, the verification code is logged in Render.<br>' +
+                    '👉 Go to: <strong>Render Dashboard → Your Service → Logs tab</strong><br>' +
+                    '🔍 Look for: <code>VERIFICATION CODE</code> in the logs';
+                messageEl.parentNode.insertBefore(logNote, messageEl.nextSibling);
+            }
         } else {
             showMessage(messageEl, data.message, 'error');
         }

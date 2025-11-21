@@ -20,10 +20,16 @@ if (isEmailConfigured) {
   // Verify transporter configuration
   transporter.verify(function (error, success) {
     if (error) {
-      console.log('⚠️  Email transporter error:', error.message);
+      console.log('⚠️  Email transporter verification failed:');
+      console.log('   Error:', error.message);
+      console.log('   Code:', error.code);
       console.log('📧 Email sending disabled. Verification codes will be logged to console.');
+      console.log('💡 Check: EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_PORT in environment variables');
     } else {
       console.log('✅ Email server is ready to send messages');
+      console.log('   Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
+      console.log('   Port:', process.env.EMAIL_PORT || 587);
+      console.log('   User:', process.env.EMAIL_USER);
     }
   });
 } else {
@@ -70,13 +76,18 @@ const sendVerificationCode = async (email, code) => {
 
   try {
     const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Verification email sent:', info.messageId);
+    console.log('✅ Verification email sent successfully!');
+    console.log('   Message ID:', info.messageId);
+    console.log('   To:', email);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('❌ Error sending verification email:', error.message);
+    console.error('❌ Error sending verification email:');
+    console.error('   Error:', error.message);
+    console.error('   Code:', error.code);
+    console.error('   Response:', error.response);
     // Fallback to console logging if email fails
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('📧 VERIFICATION CODE (Email sending failed)');
+    console.log('📧 VERIFICATION CODE (Email sending failed - using console)');
     console.log('═══════════════════════════════════════════════════════');
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);

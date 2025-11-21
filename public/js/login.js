@@ -1,5 +1,20 @@
-// API Configuration
-let API_URL = localStorage.getItem('apiUrl') || 'http://localhost:3000';
+// API Configuration - Auto-detect API URL from current domain
+function getApiUrl() {
+  const stored = localStorage.getItem('apiUrl');
+  if (stored) return stored;
+  
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  
+  if (hostname.includes('render.com') || hostname.includes('onrender.com')) {
+    return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+  }
+  
+  return 'http://localhost:3000';
+}
+
+let API_URL = getApiUrl();
 
 // Tab switching
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -73,6 +88,9 @@ function showMessage(element, message, type) {
         element.className = 'message';
     }, 5000);
 }
+
+
+
 
 
 

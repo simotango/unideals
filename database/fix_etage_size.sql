@@ -6,3 +6,6 @@ ALTER TABLE orders ALTER COLUMN etage TYPE VARCHAR(50);
 
 
 
+
+
+

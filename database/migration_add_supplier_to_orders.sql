@@ -24,3 +24,6 @@ ALTER COLUMN supplier_name SET NOT NULL;
 
 
 
+
+
+

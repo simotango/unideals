@@ -1,5 +1,24 @@
-// API Configuration
-let API_URL = localStorage.getItem('apiUrl') || 'http://localhost:3000';
+// API Configuration - Auto-detect API URL from current domain
+function getApiUrl() {
+  // Check localStorage first (for manual override)
+  const stored = localStorage.getItem('apiUrl');
+  if (stored) return stored;
+  
+  // Auto-detect from current window location
+  const protocol = window.location.protocol;
+  const hostname = window.location.hostname;
+  const port = window.location.port;
+  
+  // If on Render or production, use current domain
+  if (hostname.includes('render.com') || hostname.includes('onrender.com')) {
+    return `${protocol}//${hostname}${port ? ':' + port : ''}`;
+  }
+  
+  // Default to localhost for development
+  return 'http://localhost:3000';
+}
+
+let API_URL = getApiUrl();
 let selectedUserType = null;
 let studentEmail = '';
 
@@ -129,6 +148,9 @@ function showMessage(element, message, type) {
         element.className = 'message';
     }, 5000);
 }
+
+
+
 
 
 

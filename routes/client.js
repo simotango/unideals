@@ -625,5 +625,38 @@ router.get('/orders', authenticate, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/client/test-email
+ * Test email configuration (for debugging)
+ */
+router.get('/test-email', async (req, res) => {
+  try {
+    const { sendVerificationCode } = require('../config/email');
+    const testEmail = req.query.email || 'test@example.com';
+    const testCode = '123456';
+    
+    console.log('🧪 Testing email configuration...');
+    console.log('   Test email:', testEmail);
+    
+    const result = await sendVerificationCode(testEmail, testCode);
+    
+    res.json({
+      success: true,
+      message: 'Email test completed. Check server logs for details.',
+      data: {
+        emailSent: result.messageId !== 'console-log' && result.messageId !== 'console-log-fallback',
+        messageId: result.messageId,
+        testEmail: testEmail
+      }
+    });
+  } catch (error) {
+    console.error('Test email error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error testing email: ' + error.message 
+    });
+  }
+});
+
 module.exports = router;
 

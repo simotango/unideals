@@ -4,6 +4,14 @@ require('dotenv').config();
 // Check if email is configured
 const isEmailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASS;
 
+// Debug: Log email configuration status
+console.log('\n📧 Email Configuration Check:');
+console.log('   EMAIL_HOST:', process.env.EMAIL_HOST || 'smtp.gmail.com (default)');
+console.log('   EMAIL_PORT:', process.env.EMAIL_PORT || '587 (default)');
+console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Not set');
+console.log('   EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Set' : '❌ Not set');
+console.log('   Configured:', isEmailConfigured ? '✅ Yes' : '❌ No');
+
 // Create transporter for sending emails (only if configured)
 let transporter = null;
 if (isEmailConfigured) {

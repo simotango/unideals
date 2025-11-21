@@ -17,14 +17,19 @@ if (isEmailConfigured) {
     }
   });
 
-  // Verify transporter configuration
+  // Verify transporter configuration (async to not block server start)
   transporter.verify(function (error, success) {
     if (error) {
       console.log('⚠️  Email transporter verification failed:');
       console.log('   Error:', error.message);
       console.log('   Code:', error.code);
-      console.log('📧 Email sending disabled. Verification codes will be logged to console.');
+      if (error.response) {
+        console.log('   Response:', error.response);
+      }
+      console.log('📧 Email sending will be attempted but may fail.');
       console.log('💡 Check: EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_PORT in environment variables');
+      console.log('💡 For Gmail: Use App Password (not regular password) - https://myaccount.google.com/apppasswords');
+      // Don't disable transporter - let it try to send anyway
     } else {
       console.log('✅ Email server is ready to send messages');
       console.log('   Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
@@ -46,14 +51,30 @@ if (isEmailConfigured) {
  */
 const sendVerificationCode = async (email, code) => {
   // If email is not configured, just log to console
-  if (!isEmailConfigured || !transporter) {
+  if (!isEmailConfigured) {
     console.log('\n═══════════════════════════════════════════════════════');
     console.log('📧 VERIFICATION CODE (Email not configured)');
     console.log('═══════════════════════════════════════════════════════');
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('💡 To enable email: Set EMAIL_USER and EMAIL_PASS in Render environment variables');
     console.log('═══════════════════════════════════════════════════════\n');
     return { success: true, messageId: 'console-log' };
+  }
+  
+  // If transporter is null but email is configured, try to create it
+  if (!transporter) {
+    console.log('⚠️  Transporter not initialized, attempting to create...');
+    transporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+      port: process.env.EMAIL_PORT || 587,
+      secure: false,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+      }
+    });
   }
 
   const mailOptions = {

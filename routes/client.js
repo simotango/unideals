@@ -83,17 +83,14 @@ router.post('/register', async (req, res) => {
       emailConfigured: emailConfigured
     };
     
-    // If email failed to send, include code in response (for development/testing)
-    if (!emailSent) {
-      responseData.verificationCode = verificationCode;
-      responseData.note = 'Email not configured or failed to send. Use the verification code above.';
-    }
+    // NEVER send verification code in response - it should only be in email or logs
+    // If email fails, user must check logs (for security)
 
     res.status(201).json({
       success: true,
       message: emailSent 
         ? 'Verification code sent to your email. Please check your inbox.' 
-        : 'Verification code generated. Email not configured - check server logs or use the code below.',
+        : 'Verification code sent. If you don\'t receive an email, check server logs for the code.',
       data: responseData
     });
   } catch (error) {

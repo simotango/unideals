@@ -18,18 +18,30 @@ let transporterReady = false;
 let transporterError = null;
 
 if (isEmailConfigured) {
+  // Try port 465 (SSL) first, fallback to 587 (TLS)
+  const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
+  const useSSL = emailPort === 465;
+  
   transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.EMAIL_PORT) || 587,
-    secure: false, // true for 465, false for other ports
+    port: emailPort,
+    secure: useSSL, // true for 465 (SSL), false for 587 (TLS)
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
     },
-    // Add connection timeouts
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000
+    // Increased timeouts for Render network
+    connectionTimeout: 30000, // 30 seconds (increased from 10)
+    greetingTimeout: 30000,   // 30 seconds
+    socketTimeout: 30000,     // 30 seconds
+    // Additional options for better connection
+    tls: {
+      rejectUnauthorized: false // Allow self-signed certificates if needed
+    },
+    // Retry configuration
+    pool: false,
+    maxConnections: 1,
+    maxMessages: 1
   });
 
   // Verify transporter configuration (async to not block server start)
@@ -49,6 +61,12 @@ if (isEmailConfigured) {
       console.log('📧 Email sending will be attempted but may fail.');
       console.log('💡 Check: EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_PORT in environment variables');
       console.log('💡 For Gmail: Use App Password (not regular password) - https://myaccount.google.com/apppasswords');
+      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+        console.log('💡 Connection timeout detected! Try these fixes:');
+        console.log('   1. Change EMAIL_PORT to 465 (SSL) instead of 587 (TLS)');
+        console.log('   2. Render free tier may block SMTP - consider upgrading or using email service');
+        console.log('   3. Check if Gmail is blocking Render IP addresses');
+      }
       // Don't disable transporter - let it try to send anyway
     } else {
       transporterReady = true;
@@ -88,17 +106,23 @@ const sendVerificationCode = async (email, code) => {
   // If transporter is null but email is configured, try to create it
   if (!transporter && isEmailConfigured) {
     console.log('⚠️  Transporter not initialized, attempting to create...');
+    const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
+    const useSSL = emailPort === 465;
+    
     transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: parseInt(process.env.EMAIL_PORT) || 587,
-      secure: false,
+      port: emailPort,
+      secure: useSSL,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      socketTimeout: 30000,
+      tls: {
+        rejectUnauthorized: false
+      }
     });
   }
   
@@ -137,8 +161,10 @@ const sendVerificationCode = async (email, code) => {
     console.log('📤 Attempting to send email via SMTP...');
     console.log('   SMTP Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
     console.log('   SMTP Port:', process.env.EMAIL_PORT || '587');
+    console.log('   Secure (SSL):', parseInt(process.env.EMAIL_PORT) === 465 ? 'Yes' : 'No (TLS)');
     console.log('   From:', process.env.EMAIL_USER);
     console.log('   To:', email);
+    console.log('   Connection Timeout: 30 seconds');
     
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Verification email sent successfully!');

@@ -53,14 +53,27 @@ router.post('/register', async (req, res) => {
       client = await Client.create(email, verificationCode, codeExpiresAt);
     }
 
-    // Check email configuration
-    const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+    // Check email configuration (SMTP, SendGrid, or Mailjet)
+    const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS) ||
+                            !!process.env.SENDGRID_API_KEY ||
+                            !!(process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
+    
+    // Determine which service is configured
+    let emailService = 'None';
+    if (process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET) {
+      emailService = 'Mailjet';
+    } else if (process.env.SENDGRID_API_KEY) {
+      emailService = 'SendGrid';
+    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+      emailService = 'SMTP';
+    }
     
     // Send verification email
     console.log('\n📧 Sending verification email...');
     console.log('   To:', email);
     console.log('   Code:', verificationCode);
     console.log('   Email configured:', emailConfigured ? '✅ Yes' : '❌ No');
+    console.log('   Email service:', emailService);
     
     const emailResult = await sendVerificationCode(email, verificationCode);
     
@@ -72,15 +85,21 @@ router.post('/register', async (req, res) => {
     if (emailSent) {
       console.log('✅ Verification email sent successfully!');
       console.log('   Message ID:', emailResult.messageId);
+      console.log('   Service:', emailService);
     } else {
       console.log('⚠️  Email not sent - verification code logged to console');
+      console.log('   Service attempted:', emailService);
+      if (emailResult.error) {
+        console.log('   Error:', emailResult.error);
+      }
     }
 
     // Prepare response with email status
     const responseData = {
       email: client.email,
       emailSent: emailSent,
-      emailConfigured: emailConfigured
+      emailConfigured: emailConfigured,
+      emailService: emailService
     };
     
     // NEVER send verification code in response - it should only be in email or logs

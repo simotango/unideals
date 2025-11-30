@@ -241,7 +241,22 @@ const sendVerificationCode = async (email, code) => {
           console.error('   Stack:', error.stack.substring(0, 300));
         }
         console.log('⚠️  Mailjet failed, trying SendGrid or SMTP...');
+        // Return error info for debugging
+        return { 
+          success: false, 
+          messageId: 'mailjet-failed',
+          error: error.message,
+          errorDetails: error.response ? 'Check logs for full error' : error.message
+        };
       }
+    } else {
+      console.log('⚠️  Mailjet API keys set but mailjet not initialized!');
+      console.log('   Check: Is node-mailjet package installed?');
+      return { 
+        success: false, 
+        messageId: 'mailjet-not-initialized',
+        error: 'Mailjet package not installed or initialization failed'
+      };
     }
   } else {
     console.log('ℹ️  Mailjet not configured. useMailjet:', useMailjet, 'mailjet:', !!mailjet);

@@ -160,8 +160,20 @@ const sendVerificationCode = async (email, code) => {
       console.error('   Failed Command:', error.command);
     }
     
-    // Log full error for debugging
-    console.error('   Full Error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    // Log full error for debugging (safely handle circular references)
+    try {
+      const errorDetails = {
+        message: error.message,
+        code: error.code,
+        response: error.response,
+        responseCode: error.responseCode,
+        command: error.command,
+        stack: error.stack
+      };
+      console.error('   Error Details:', JSON.stringify(errorDetails, null, 2));
+    } catch (stringifyError) {
+      console.error('   Error (could not stringify):', error.message);
+    }
     
     // Fallback to console logging if email fails
     console.log('\n═══════════════════════════════════════════════════════');

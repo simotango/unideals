@@ -24,13 +24,19 @@ if (useSendGrid) {
 let mailjet = null;
 if (useMailjet) {
   try {
-    mailjet = require('node-mailjet').apiConnect(
+    const Mailjet = require('node-mailjet');
+    mailjet = Mailjet.apiConnect(
       process.env.MAILJET_API_KEY,
       process.env.MAILJET_API_SECRET
     );
     console.log('✅ Mailjet API configured (6,000 emails/month free!)');
+    console.log('   API Key:', process.env.MAILJET_API_KEY.substring(0, 8) + '...');
   } catch (error) {
-    console.log('⚠️  Mailjet package not installed. Run: npm install node-mailjet');
+    console.log('⚠️  Mailjet initialization failed:');
+    console.log('   Error:', error.message);
+    console.log('   Check: Is node-mailjet package installed?');
+    console.log('   Run: npm install node-mailjet');
+    console.log('   Or check if API keys are correct');
   }
 }
 
@@ -147,11 +153,18 @@ const sendVerificationCode = async (email, code) => {
   }
 
   // Try Mailjet first (most free emails - 6,000/month!)
-  if (useMailjet && mailjet) {
-    try {
-      console.log('📤 Sending email via Mailjet API...');
-      console.log('   From:', process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
-      console.log('   To:', email);
+  if (useMailjet) {
+    if (!mailjet) {
+      console.error('❌ Mailjet API keys set but mailjet not initialized!');
+      console.error('   Check: Is node-mailjet package installed?');
+      console.error('   Run: npm install node-mailjet');
+    } else {
+      try {
+        console.log('📤 Sending email via Mailjet API...');
+        console.log('   API Key:', process.env.MAILJET_API_KEY ? '✅ Set' : '❌ Not set');
+        console.log('   API Secret:', process.env.MAILJET_API_SECRET ? '✅ Set' : '❌ Not set');
+        console.log('   From:', process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
+        console.log('   To:', email);
       
       const result = await mailjet.post('send', { version: 'v3.1' }).request({
         Messages: [{
@@ -191,8 +204,13 @@ const sendVerificationCode = async (email, code) => {
       if (error.response && error.response.body) {
         console.error('   Response:', JSON.stringify(error.response.body, null, 2));
       }
-      console.log('⚠️  Mailjet failed, trying SendGrid or SMTP...');
+        console.log('⚠️  Mailjet failed, trying SendGrid or SMTP...');
+      }
     }
+  } else {
+    console.log('ℹ️  Mailjet not configured. useMailjet:', useMailjet, 'mailjet:', !!mailjet);
+    console.log('   MAILJET_API_KEY:', process.env.MAILJET_API_KEY ? 'Set' : 'Not set');
+    console.log('   MAILJET_API_SECRET:', process.env.MAILJET_API_SECRET ? 'Set' : 'Not set');
   }
 
   // Try SendGrid second (works on Render free tier)

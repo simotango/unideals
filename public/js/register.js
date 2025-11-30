@@ -52,17 +52,47 @@ document.getElementById('student-register-form').addEventListener('submit', asyn
         
         const data = await response.json();
         if (data.success) {
-            // Check if email was actually sent or if code is in logs
-            const message = data.message + ' If you don\'t receive an email, check Render logs for the verification code.';
-            showMessage(messageEl, message, 'success');
+            // Show success message
+            showMessage(messageEl, data.message, 'success');
             document.getElementById('verify-section').style.display = 'block';
             
-            // Show helpful note about checking logs if on Render
-            if (API_URL.includes('render.com') || API_URL.includes('onrender.com')) {
+            // Show email status and verification code if email wasn't sent
+            if (data.data && !data.data.emailSent) {
+                const statusNote = document.createElement('div');
+                statusNote.className = 'email-status-note';
+                statusNote.style.cssText = 'margin-top: 15px; padding: 15px; background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; font-size: 14px; color: #856404; line-height: 1.6;';
+                
+                let noteContent = '📧 <strong>Email Status:</strong> Email not configured or failed to send.<br><br>';
+                
+                // If verification code is provided, show it
+                if (data.data.verificationCode) {
+                    noteContent += '🔑 <strong>Your Verification Code:</strong><br>';
+                    noteContent += '<div style="margin: 10px 0; padding: 12px; background: #fff; border: 2px dashed #ffc107; border-radius: 6px; text-align: center;">';
+                    noteContent += '<span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #4CAF50;">' + data.data.verificationCode + '</span>';
+                    noteContent += '</div>';
+                    noteContent += '<small>Enter this code in the verification field below.</small>';
+                } else {
+                    noteContent += '💡 Check server logs for the verification code.';
+                }
+                
+                statusNote.innerHTML = noteContent;
+                messageEl.parentNode.insertBefore(statusNote, messageEl.nextSibling);
+            } else if (data.data && data.data.emailSent) {
+                // Email was sent successfully
+                const successNote = document.createElement('div');
+                successNote.className = 'email-success-note';
+                successNote.style.cssText = 'margin-top: 15px; padding: 12px; background: #d4edda; border: 2px solid #28a745; border-radius: 8px; font-size: 14px; color: #155724; line-height: 1.6;';
+                successNote.innerHTML = '✅ <strong>Email Sent!</strong> Check your inbox for the verification code.';
+                messageEl.parentNode.insertBefore(successNote, messageEl.nextSibling);
+            }
+            
+            // Show helpful note about checking logs if on Render and email not configured
+            if ((API_URL.includes('render.com') || API_URL.includes('onrender.com')) && 
+                data.data && !data.data.emailSent) {
                 const logNote = document.createElement('div');
                 logNote.className = 'log-note';
-                logNote.style.cssText = 'margin-top: 10px; padding: 12px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; font-size: 13px; color: #856404; line-height: 1.5;';
-                logNote.innerHTML = '📧 <strong>Email Status:</strong> If you don\'t receive an email, the verification code is logged in Render.<br>' +
+                logNote.style.cssText = 'margin-top: 10px; padding: 12px; background: #e7f3ff; border: 1px solid #2196F3; border-radius: 6px; font-size: 13px; color: #0d47a1; line-height: 1.5;';
+                logNote.innerHTML = '📋 <strong>Render Logs:</strong> You can also find the code in Render logs.<br>' +
                     '👉 Go to: <strong>Render Dashboard → Your Service → Logs tab</strong><br>' +
                     '🔍 Look for: <code>VERIFICATION CODE</code> in the logs';
                 messageEl.parentNode.insertBefore(logNote, messageEl.nextSibling);

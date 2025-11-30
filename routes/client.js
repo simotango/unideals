@@ -53,13 +53,48 @@ router.post('/register', async (req, res) => {
       client = await Client.create(email, verificationCode, codeExpiresAt);
     }
 
+    // Check email configuration
+    const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+    
     // Send verification email
-    await sendVerificationCode(email, verificationCode);
+    console.log('\n📧 Sending verification email...');
+    console.log('   To:', email);
+    console.log('   Code:', verificationCode);
+    console.log('   Email configured:', emailConfigured ? '✅ Yes' : '❌ No');
+    
+    const emailResult = await sendVerificationCode(email, verificationCode);
+    
+    // Check if email was actually sent
+    const emailSent = emailResult.messageId && 
+                     emailResult.messageId !== 'console-log' && 
+                     emailResult.messageId !== 'console-log-fallback';
+    
+    if (emailSent) {
+      console.log('✅ Verification email sent successfully!');
+      console.log('   Message ID:', emailResult.messageId);
+    } else {
+      console.log('⚠️  Email not sent - verification code logged to console');
+    }
+
+    // Prepare response with email status
+    const responseData = {
+      email: client.email,
+      emailSent: emailSent,
+      emailConfigured: emailConfigured
+    };
+    
+    // If email failed to send, include code in response (for development/testing)
+    if (!emailSent) {
+      responseData.verificationCode = verificationCode;
+      responseData.note = 'Email not configured or failed to send. Use the verification code above.';
+    }
 
     res.status(201).json({
       success: true,
-      message: 'Verification code sent to your email',
-      data: { email: client.email }
+      message: emailSent 
+        ? 'Verification code sent to your email. Please check your inbox.' 
+        : 'Verification code generated. Email not configured - check server logs or use the code below.',
+      data: responseData
     });
   } catch (error) {
     console.error('Registration error:', error);

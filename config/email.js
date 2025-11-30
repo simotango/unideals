@@ -1,4 +1,5 @@
 require('dotenv').config();
+const https = require('https');
 
 // Mailjet API Configuration
 const MAILJET_API_KEY = process.env.MAILJET_API_KEY;
@@ -57,62 +58,109 @@ const sendVerificationCode = async (email, code) => {
     // Create Basic Auth header (API Key as username, Secret as password)
     const authString = Buffer.from(`${MAILJET_API_KEY}:${MAILJET_API_SECRET}`).toString('base64');
 
-    // Mailjet API v3.1 send endpoint
-    const response = await fetch('https://api.mailjet.com/v3.1/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${authString}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        Messages: [{
-          From: {
-            Email: MAILJET_FROM_EMAIL,
-            Name: 'UniDeals'
-          },
-          To: [{
-            Email: email
-          }],
-          Subject: 'UniDeals - Email Verification Code',
-          HTMLPart: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #4CAF50;">UniDeals Verification</h2>
-              <p>Thank you for registering with UniDeals!</p>
-              <p>Your verification code is:</p>
-              <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-                <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
-              </div>
-              <p>This code will expire in 10 minutes.</p>
-              <p>If you didn't request this code, please ignore this email.</p>
+    // Prepare request data
+    const requestData = JSON.stringify({
+      Messages: [{
+        From: {
+          Email: MAILJET_FROM_EMAIL,
+          Name: 'UniDeals'
+        },
+        To: [{
+          Email: email
+        }],
+        Subject: 'UniDeals - Email Verification Code',
+        HTMLPart: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #4CAF50;">UniDeals Verification</h2>
+            <p>Thank you for registering with UniDeals!</p>
+            <p>Your verification code is:</p>
+            <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
             </div>
-          `
-        }]
-      })
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this code, please ignore this email.</p>
+          </div>
+        `
+      }]
+    });
+
+    // Make HTTPS request to Mailjet API
+    const result = await new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'api.mailjet.com',
+        port: 443,
+        path: '/v3.1/send',
+        method: 'POST',
+        headers: {
+          'Authorization': `Basic ${authString}`,
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(requestData)
+        }
+      };
+
+      const req = https.request(options, (res) => {
+        let responseData = '';
+
+        res.on('data', (chunk) => {
+          responseData += chunk;
+        });
+
+        res.on('end', () => {
+          try {
+            const parsed = JSON.parse(responseData);
+            resolve({
+              status: res.statusCode,
+              statusText: res.statusMessage,
+              ok: res.statusCode >= 200 && res.statusCode < 300,
+              json: () => Promise.resolve(parsed)
+            });
+          } catch (error) {
+            reject(new Error(`Failed to parse response: ${error.message}. Response: ${responseData.substring(0, 500)}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+
+      req.write(requestData);
+      req.end();
     });
 
     // Parse response
-    const result = await response.json();
+    const response = await result.json();
 
-    if (!response.ok) {
+    const responseStatus = result.status;
+    const responseOk = result.ok;
+    const responseData = response;
+
+    if (!responseOk) {
       // Error response from Mailjet
       console.error('❌ Mailjet API Error:');
-      console.error('   Status:', response.status, response.statusText);
-      console.error('   Response:', JSON.stringify(result, null, 2));
+      console.error('   Status:', responseStatus, result.statusText);
+      console.error('   Response:', JSON.stringify(responseData, null, 2));
       
       // Common error messages
-      if (result.ErrorMessage) {
-        console.error('   Error Message:', result.ErrorMessage);
+      if (responseData.ErrorMessage) {
+        console.error('   Error Message:', responseData.ErrorMessage);
       }
-      if (result.ErrorInfo) {
-        console.error('   Error Info:', result.ErrorInfo);
+      if (responseData.ErrorInfo) {
+        console.error('   Error Info:', responseData.ErrorInfo);
+      }
+      if (responseData.ErrorIdentifier) {
+        console.error('   Error Identifier:', responseData.ErrorIdentifier);
       }
       
       // Check for common issues
-      if (response.status === 401) {
+      if (responseStatus === 401) {
         console.error('   💡 Issue: Invalid API credentials. Check MAILJET_API_KEY and MAILJET_API_SECRET');
-      } else if (response.status === 400) {
+      } else if (responseStatus === 400) {
         console.error('   💡 Issue: Bad request. Check if sender email is verified in Mailjet');
         console.error('   💡 Verify sender: https://app.mailjet.com/account/sender');
+        if (responseData.ErrorMessage) {
+          console.error('   💡 Mailjet says:', responseData.ErrorMessage);
+        }
       }
       
       // Fallback to console logging
@@ -126,19 +174,19 @@ const sendVerificationCode = async (email, code) => {
       return { 
         success: false, 
         messageId: 'mailjet-api-failed',
-        error: result.ErrorMessage || `HTTP ${response.status}: ${response.statusText}`
+        error: responseData.ErrorMessage || `HTTP ${responseStatus}: ${result.statusText}`
       };
     }
 
     // Success!
     console.log('✅ Verification email sent via Mailjet!');
-    console.log('   Status:', response.status);
-    if (result.Messages && result.Messages[0]) {
-      console.log('   Message ID:', result.Messages[0].To[0].MessageID || 'N/A');
-      console.log('   Status:', result.Messages[0].Status || 'sent');
+    console.log('   Status:', responseStatus);
+    if (responseData.Messages && responseData.Messages[0]) {
+      console.log('   Message ID:', responseData.Messages[0].To[0].MessageID || 'N/A');
+      console.log('   Status:', responseData.Messages[0].Status || 'sent');
       return { 
         success: true, 
-        messageId: result.Messages[0].To[0].MessageID || 'mailjet-success'
+        messageId: responseData.Messages[0].To[0].MessageID || 'mailjet-success'
       };
     }
     
@@ -154,8 +202,10 @@ const sendVerificationCode = async (email, code) => {
     }
     
     // Network errors
-    if (error.message.includes('fetch')) {
-      console.error('   💡 Issue: Network error. Check internet connection or Render network settings');
+    if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+      console.error('   💡 Issue: Cannot connect to Mailjet API. Check network connection');
+    } else if (error.code) {
+      console.error('   💡 Network error code:', error.code);
     }
     
     // Fallback to console logging

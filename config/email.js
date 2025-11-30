@@ -1,9 +1,12 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Check if email is configured (SMTP or SendGrid)
-const isEmailConfigured = (process.env.EMAIL_USER && process.env.EMAIL_PASS) || process.env.SENDGRID_API_KEY;
+// Check if email is configured (SMTP, SendGrid, or Mailjet)
+const isEmailConfigured = (process.env.EMAIL_USER && process.env.EMAIL_PASS) || 
+                          process.env.SENDGRID_API_KEY || 
+                          (process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
 const useSendGrid = !!process.env.SENDGRID_API_KEY;
+const useMailjet = !!(process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
 
 // Initialize SendGrid if API key is provided
 let sendgrid = null;
@@ -11,16 +14,34 @@ if (useSendGrid) {
   try {
     sendgrid = require('@sendgrid/mail');
     sendgrid.setApiKey(process.env.SENDGRID_API_KEY);
-    console.log('✅ SendGrid API configured (bypasses SMTP blocking)');
+    console.log('✅ SendGrid API configured (100 emails/day free)');
   } catch (error) {
     console.log('⚠️  SendGrid package not installed. Run: npm install @sendgrid/mail');
   }
 }
 
+// Initialize Mailjet if API keys are provided (6,000 emails/month free!)
+let mailjet = null;
+if (useMailjet) {
+  try {
+    mailjet = require('node-mailjet').apiConnect(
+      process.env.MAILJET_API_KEY,
+      process.env.MAILJET_API_SECRET
+    );
+    console.log('✅ Mailjet API configured (6,000 emails/month free!)');
+  } catch (error) {
+    console.log('⚠️  Mailjet package not installed. Run: npm install node-mailjet');
+  }
+}
+
 // Debug: Log email configuration status
 console.log('\n📧 Email Configuration Check:');
-if (useSendGrid) {
-  console.log('   Method: SendGrid API (works on Render free tier)');
+if (useMailjet) {
+  console.log('   Method: Mailjet API (6,000 emails/month free!)');
+  console.log('   MAILJET_API_KEY:', process.env.MAILJET_API_KEY ? '✅ Set' : '❌ Not set');
+  console.log('   MAILJET_API_SECRET:', process.env.MAILJET_API_SECRET ? '✅ Set' : '❌ Not set');
+} else if (useSendGrid) {
+  console.log('   Method: SendGrid API (100 emails/day free)');
   console.log('   SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? '✅ Set' : '❌ Not set');
 } else {
   console.log('   Method: SMTP (may be blocked on Render free tier)');
@@ -117,14 +138,64 @@ const sendVerificationCode = async (email, code) => {
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);
     console.log('═══════════════════════════════════════════════════════');
-    console.log('💡 To enable email:');
-    console.log('   Option 1: Set SENDGRID_API_KEY (recommended for Render)');
-    console.log('   Option 2: Set EMAIL_USER and EMAIL_PASS (SMTP - may be blocked)');
+    console.log('💡 To enable email (all FREE options):');
+    console.log('   Option 1: Mailjet (6,000 emails/month) - Set MAILJET_API_KEY & MAILJET_API_SECRET');
+    console.log('   Option 2: SendGrid (100 emails/day) - Set SENDGRID_API_KEY');
+    console.log('   Option 3: SMTP (may be blocked on Render) - Set EMAIL_USER & EMAIL_PASS');
     console.log('═══════════════════════════════════════════════════════\n');
     return { success: true, messageId: 'console-log' };
   }
 
-  // Try SendGrid first (works on Render free tier)
+  // Try Mailjet first (most free emails - 6,000/month!)
+  if (useMailjet && mailjet) {
+    try {
+      console.log('📤 Sending email via Mailjet API...');
+      console.log('   From:', process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
+      console.log('   To:', email);
+      
+      const result = await mailjet.post('send', { version: 'v3.1' }).request({
+        Messages: [{
+          From: {
+            Email: process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com',
+            Name: 'UniDeals'
+          },
+          To: [{
+            Email: email
+          }],
+          Subject: 'UniDeals - Email Verification Code',
+          HTMLPart: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #4CAF50;">UniDeals Verification</h2>
+              <p>Thank you for registering with UniDeals!</p>
+              <p>Your verification code is:</p>
+              <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+                <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
+              </div>
+              <p>This code will expire in 10 minutes.</p>
+              <p>If you didn't request this code, please ignore this email.</p>
+            </div>
+          `
+        }]
+      });
+
+      console.log('✅ Verification email sent via Mailjet!');
+      console.log('   Status:', result.body.Messages[0].Status || 'sent');
+      console.log('   To:', email);
+      return { success: true, messageId: result.body.Messages[0].To[0].MessageID || 'mailjet-success' };
+    } catch (error) {
+      console.error('❌ Error sending email via Mailjet:');
+      console.error('   Error:', error.message);
+      if (error.statusCode) {
+        console.error('   Status Code:', error.statusCode);
+      }
+      if (error.response && error.response.body) {
+        console.error('   Response:', JSON.stringify(error.response.body, null, 2));
+      }
+      console.log('⚠️  Mailjet failed, trying SendGrid or SMTP...');
+    }
+  }
+
+  // Try SendGrid second (works on Render free tier)
   if (useSendGrid && sendgrid) {
     try {
       console.log('📤 Sending email via SendGrid API...');

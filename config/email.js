@@ -1,15 +1,34 @@
 const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Check if email is configured
-const isEmailConfigured = process.env.EMAIL_USER && process.env.EMAIL_PASS;
+// Check if email is configured (SMTP or SendGrid)
+const isEmailConfigured = (process.env.EMAIL_USER && process.env.EMAIL_PASS) || process.env.SENDGRID_API_KEY;
+const useSendGrid = !!process.env.SENDGRID_API_KEY;
+
+// Initialize SendGrid if API key is provided
+let sendgrid = null;
+if (useSendGrid) {
+  try {
+    sendgrid = require('@sendgrid/mail');
+    sendgrid.setApiKey(process.env.SENDGRID_API_KEY);
+    console.log('✅ SendGrid API configured (bypasses SMTP blocking)');
+  } catch (error) {
+    console.log('⚠️  SendGrid package not installed. Run: npm install @sendgrid/mail');
+  }
+}
 
 // Debug: Log email configuration status
 console.log('\n📧 Email Configuration Check:');
-console.log('   EMAIL_HOST:', process.env.EMAIL_HOST || 'smtp.gmail.com (default)');
-console.log('   EMAIL_PORT:', process.env.EMAIL_PORT || '587 (default)');
-console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Not set');
-console.log('   EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Set' : '❌ Not set');
+if (useSendGrid) {
+  console.log('   Method: SendGrid API (works on Render free tier)');
+  console.log('   SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? '✅ Set' : '❌ Not set');
+} else {
+  console.log('   Method: SMTP (may be blocked on Render free tier)');
+  console.log('   EMAIL_HOST:', process.env.EMAIL_HOST || 'smtp.gmail.com (default)');
+  console.log('   EMAIL_PORT:', process.env.EMAIL_PORT || '587 (default)');
+  console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Not set');
+  console.log('   EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Set' : '❌ Not set');
+}
 console.log('   Configured:', isEmailConfigured ? '✅ Yes' : '❌ No');
 
 // Create transporter for sending emails (only if configured)
@@ -98,9 +117,54 @@ const sendVerificationCode = async (email, code) => {
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);
     console.log('═══════════════════════════════════════════════════════');
-    console.log('💡 To enable email: Set EMAIL_USER and EMAIL_PASS in Render environment variables');
+    console.log('💡 To enable email:');
+    console.log('   Option 1: Set SENDGRID_API_KEY (recommended for Render)');
+    console.log('   Option 2: Set EMAIL_USER and EMAIL_PASS (SMTP - may be blocked)');
     console.log('═══════════════════════════════════════════════════════\n');
     return { success: true, messageId: 'console-log' };
+  }
+
+  // Try SendGrid first (works on Render free tier)
+  if (useSendGrid && sendgrid) {
+    try {
+      console.log('📤 Sending email via SendGrid API...');
+      console.log('   From:', process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
+      console.log('   To:', email);
+      
+      const msg = {
+        to: email,
+        from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com',
+        subject: 'UniDeals - Email Verification Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #4CAF50;">UniDeals Verification</h2>
+            <p>Thank you for registering with UniDeals!</p>
+            <p>Your verification code is:</p>
+            <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+              <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
+            </div>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this code, please ignore this email.</p>
+          </div>
+        `
+      };
+
+      const response = await sendgrid.send(msg);
+      console.log('✅ Verification email sent via SendGrid!');
+      console.log('   Status Code:', response[0].statusCode);
+      console.log('   Message ID:', response[0].headers['x-message-id'] || 'N/A');
+      console.log('   To:', email);
+      return { success: true, messageId: response[0].headers['x-message-id'] || 'sendgrid-success' };
+    } catch (error) {
+      console.error('❌ Error sending email via SendGrid:');
+      console.error('   Error:', error.message);
+      if (error.response) {
+        console.error('   Status Code:', error.response.statusCode);
+        console.error('   Body:', JSON.stringify(error.response.body, null, 2));
+      }
+      // Fall through to SMTP or console logging
+      console.log('⚠️  SendGrid failed, trying SMTP or console logging...');
+    }
   }
   
   // If transporter is null but email is configured, try to create it

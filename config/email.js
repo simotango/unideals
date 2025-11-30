@@ -166,44 +166,80 @@ const sendVerificationCode = async (email, code) => {
         console.log('   From:', process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
         console.log('   To:', email);
       
-      const result = await mailjet.post('send', { version: 'v3.1' }).request({
-        Messages: [{
-          From: {
-            Email: process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com',
-            Name: 'UniDeals'
-          },
-          To: [{
-            Email: email
-          }],
-          Subject: 'UniDeals - Email Verification Code',
-          HTMLPart: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #4CAF50;">UniDeals Verification</h2>
-              <p>Thank you for registering with UniDeals!</p>
-              <p>Your verification code is:</p>
-              <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-                <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
+        const fromEmail = process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com';
+        
+        const request = mailjet.post('send', { version: 'v3.1' }).request({
+          Messages: [{
+            From: {
+              Email: fromEmail,
+              Name: 'UniDeals'
+            },
+            To: [{
+              Email: email
+            }],
+            Subject: 'UniDeals - Email Verification Code',
+            HTMLPart: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #4CAF50;">UniDeals Verification</h2>
+                <p>Thank you for registering with UniDeals!</p>
+                <p>Your verification code is:</p>
+                <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+                  <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
+                </div>
+                <p>This code will expire in 10 minutes.</p>
+                <p>If you didn't request this code, please ignore this email.</p>
               </div>
-              <p>This code will expire in 10 minutes.</p>
-              <p>If you didn't request this code, please ignore this email.</p>
-            </div>
-          `
-        }]
-      });
+            `
+          }]
+        });
 
-      console.log('✅ Verification email sent via Mailjet!');
-      console.log('   Status:', result.body.Messages[0].Status || 'sent');
-      console.log('   To:', email);
-      return { success: true, messageId: result.body.Messages[0].To[0].MessageID || 'mailjet-success' };
-    } catch (error) {
-      console.error('❌ Error sending email via Mailjet:');
-      console.error('   Error:', error.message);
-      if (error.statusCode) {
-        console.error('   Status Code:', error.statusCode);
-      }
-      if (error.response && error.response.body) {
-        console.error('   Response:', JSON.stringify(error.response.body, null, 2));
-      }
+        const result = await request;
+        
+        console.log('✅ Verification email sent via Mailjet!');
+        console.log('   Response:', JSON.stringify(result.body, null, 2));
+        if (result.body.Messages && result.body.Messages[0]) {
+          console.log('   Status:', result.body.Messages[0].Status || 'sent');
+          const messageId = result.body.Messages[0].To && result.body.Messages[0].To[0] 
+            ? result.body.Messages[0].To[0].MessageID 
+            : 'mailjet-success';
+          return { success: true, messageId: messageId };
+        }
+        return { success: true, messageId: 'mailjet-success' };
+      } catch (error) {
+        console.error('❌ Error sending email via Mailjet:');
+        console.error('   Error Message:', error.message);
+        console.error('   Error Type:', error.name || 'Unknown');
+        
+        // Check if it's a JSON parse error (HTML response)
+        if (error.message && error.message.includes('Unexpected token')) {
+          console.error('   ⚠️  Received HTML instead of JSON - API endpoint or authentication issue!');
+          console.error('   Possible causes:');
+          console.error('   1. Invalid API keys');
+          console.error('   2. Sender email not verified in Mailjet');
+          console.error('   3. API endpoint issue');
+        }
+        
+        if (error.statusCode) {
+          console.error('   Status Code:', error.statusCode);
+        }
+        if (error.statusText) {
+          console.error('   Status Text:', error.statusText);
+        }
+        if (error.response) {
+          console.error('   Response Type:', typeof error.response);
+          if (typeof error.response === 'string') {
+            console.error('   Response (first 500 chars):', error.response.substring(0, 500));
+          } else if (error.response.body) {
+            try {
+              console.error('   Response Body:', JSON.stringify(error.response.body, null, 2));
+            } catch (e) {
+              console.error('   Response Body (raw):', error.response.body);
+            }
+          }
+        }
+        if (error.stack) {
+          console.error('   Stack:', error.stack.substring(0, 300));
+        }
         console.log('⚠️  Mailjet failed, trying SendGrid or SMTP...');
       }
     }

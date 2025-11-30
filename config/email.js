@@ -14,34 +14,48 @@ console.log('   Configured:', isEmailConfigured ? '✅ Yes' : '❌ No');
 
 // Create transporter for sending emails (only if configured)
 let transporter = null;
+let transporterReady = false;
+let transporterError = null;
+
 if (isEmailConfigured) {
   transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: process.env.EMAIL_PORT || 587,
+    port: parseInt(process.env.EMAIL_PORT) || 587,
     secure: false, // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS
-    }
+    },
+    // Add connection timeouts
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,
+    socketTimeout: 10000
   });
 
   // Verify transporter configuration (async to not block server start)
   transporter.verify(function (error, success) {
     if (error) {
+      transporterError = error;
+      transporterReady = false;
       console.log('⚠️  Email transporter verification failed:');
       console.log('   Error:', error.message);
       console.log('   Code:', error.code);
       if (error.response) {
         console.log('   Response:', error.response);
       }
+      if (error.responseCode) {
+        console.log('   Response Code:', error.responseCode);
+      }
       console.log('📧 Email sending will be attempted but may fail.');
       console.log('💡 Check: EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_PORT in environment variables');
       console.log('💡 For Gmail: Use App Password (not regular password) - https://myaccount.google.com/apppasswords');
       // Don't disable transporter - let it try to send anyway
     } else {
+      transporterReady = true;
+      transporterError = null;
       console.log('✅ Email server is ready to send messages');
       console.log('   Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
-      console.log('   Port:', process.env.EMAIL_PORT || 587);
+      console.log('   Port:', process.env.EMAIL_PORT || '587');
       console.log('   User:', process.env.EMAIL_USER);
     }
   });
@@ -72,17 +86,28 @@ const sendVerificationCode = async (email, code) => {
   }
   
   // If transporter is null but email is configured, try to create it
-  if (!transporter) {
+  if (!transporter && isEmailConfigured) {
     console.log('⚠️  Transporter not initialized, attempting to create...');
     transporter = nodemailer.createTransport({
       host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: process.env.EMAIL_PORT || 587,
+      port: parseInt(process.env.EMAIL_PORT) || 587,
       secure: false,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
-      }
+      },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000
     });
+  }
+  
+  // Log transporter status
+  if (transporter) {
+    console.log('   Transporter Status:', transporterReady ? '✅ Ready' : '⏳ Not verified yet');
+    if (transporterError) {
+      console.log('   Previous Verification Error:', transporterError.message);
+    }
   }
 
   const mailOptions = {
@@ -104,22 +129,52 @@ const sendVerificationCode = async (email, code) => {
   };
 
   try {
+    // Verify transporter is ready before sending
+    if (!transporter) {
+      throw new Error('Email transporter not initialized');
+    }
+    
+    console.log('📤 Attempting to send email via SMTP...');
+    console.log('   SMTP Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
+    console.log('   SMTP Port:', process.env.EMAIL_PORT || '587');
+    console.log('   From:', process.env.EMAIL_USER);
+    console.log('   To:', email);
+    
     const info = await transporter.sendMail(mailOptions);
     console.log('✅ Verification email sent successfully!');
     console.log('   Message ID:', info.messageId);
+    console.log('   Response:', info.response || 'N/A');
     console.log('   To:', email);
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('❌ Error sending verification email:');
-    console.error('   Error:', error.message);
-    console.error('   Code:', error.code);
-    console.error('   Response:', error.response);
+    console.error('   Error Message:', error.message);
+    console.error('   Error Code:', error.code);
+    if (error.response) {
+      console.error('   SMTP Response:', error.response);
+    }
+    if (error.responseCode) {
+      console.error('   Response Code:', error.responseCode);
+    }
+    if (error.command) {
+      console.error('   Failed Command:', error.command);
+    }
+    
+    // Log full error for debugging
+    console.error('   Full Error:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    
     // Fallback to console logging if email fails
     console.log('\n═══════════════════════════════════════════════════════');
     console.log('📧 VERIFICATION CODE (Email sending failed - using console)');
     console.log('═══════════════════════════════════════════════════════');
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('💡 Troubleshooting:');
+    console.log('   1. Check EMAIL_USER and EMAIL_PASS are set correctly');
+    console.log('   2. For Gmail, use App Password (not regular password)');
+    console.log('   3. Check if 2-Step Verification is enabled');
+    console.log('   4. Verify SMTP settings (host, port)');
     console.log('═══════════════════════════════════════════════════════\n');
     return { success: true, messageId: 'console-log-fallback' };
   }

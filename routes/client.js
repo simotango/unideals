@@ -628,32 +628,88 @@ router.get('/orders', authenticate, async (req, res) => {
 /**
  * GET /api/client/test-email
  * Test email configuration (for debugging)
+ * Query params: ?email=your-email@example.com (optional, defaults to EMAIL_USER)
  */
 router.get('/test-email', async (req, res) => {
   try {
     const { sendVerificationCode } = require('../config/email');
-    const testEmail = req.query.email || 'test@example.com';
+    
+    // Check email configuration
+    const emailConfig = {
+      EMAIL_HOST: process.env.EMAIL_HOST || 'smtp.gmail.com (default)',
+      EMAIL_PORT: process.env.EMAIL_PORT || '587 (default)',
+      EMAIL_USER: process.env.EMAIL_USER || '❌ NOT SET',
+      EMAIL_PASS: process.env.EMAIL_PASS ? '✅ Set (hidden)' : '❌ NOT SET',
+      configured: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS)
+    };
+    
+    console.log('\n🧪 Testing Email Configuration...\n');
+    console.log('📧 Email Configuration:');
+    console.log('   EMAIL_HOST:', emailConfig.EMAIL_HOST);
+    console.log('   EMAIL_PORT:', emailConfig.EMAIL_PORT);
+    console.log('   EMAIL_USER:', emailConfig.EMAIL_USER);
+    console.log('   EMAIL_PASS:', emailConfig.EMAIL_PASS);
+    console.log('');
+    
+    // Determine test email address
+    const testEmail = req.query.email || process.env.EMAIL_USER || 'test@example.com';
     const testCode = '123456';
     
-    console.log('🧪 Testing email configuration...');
-    console.log('   Test email:', testEmail);
+    if (!emailConfig.configured) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email not configured!',
+        data: {
+          emailConfig,
+          instructions: 'Add EMAIL_USER and EMAIL_PASS to .env file'
+        }
+      });
+    }
+    
+    console.log('📤 Sending test email...');
+    console.log('   To:', testEmail);
+    console.log('   Code:', testCode);
+    console.log('');
     
     const result = await sendVerificationCode(testEmail, testCode);
     
+    const emailSent = result.messageId && 
+                     result.messageId !== 'console-log' && 
+                     result.messageId !== 'console-log-fallback';
+    
+    if (emailSent) {
+      console.log('✅ Email sent successfully!');
+      console.log('   Message ID:', result.messageId);
+      console.log('   Check your inbox:', testEmail);
+    } else {
+      console.log('❌ Email failed to send');
+      console.log('   Check error messages above');
+    }
+    
     res.json({
       success: true,
-      message: 'Email test completed. Check server logs for details.',
+      message: emailSent 
+        ? 'Email test completed successfully! Check your inbox.' 
+        : 'Email test completed but failed to send. Check server logs.',
       data: {
-        emailSent: result.messageId !== 'console-log' && result.messageId !== 'console-log-fallback',
+        emailSent,
         messageId: result.messageId,
-        testEmail: testEmail
+        testEmail: testEmail,
+        testCode: testCode,
+        emailConfig: {
+          EMAIL_HOST: emailConfig.EMAIL_HOST,
+          EMAIL_PORT: emailConfig.EMAIL_PORT,
+          EMAIL_USER: emailConfig.EMAIL_USER,
+          EMAIL_PASS_SET: !!process.env.EMAIL_PASS
+        }
       }
     });
   } catch (error) {
-    console.error('Test email error:', error);
+    console.error('❌ Test email error:', error.message);
     res.status(500).json({ 
       success: false, 
-      message: 'Error testing email: ' + error.message 
+      message: 'Error testing email: ' + error.message,
+      error: error.message
     });
   }
 });

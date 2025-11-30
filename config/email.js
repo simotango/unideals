@@ -1,429 +1,184 @@
-const nodemailer = require('nodemailer');
 require('dotenv').config();
 
-// Check if email is configured (SMTP, SendGrid, or Mailjet)
-const isEmailConfigured = (process.env.EMAIL_USER && process.env.EMAIL_PASS) || 
-                          process.env.SENDGRID_API_KEY || 
-                          (process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
-const useSendGrid = !!process.env.SENDGRID_API_KEY;
-const useMailjet = !!(process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
+// Mailjet API Configuration
+const MAILJET_API_KEY = process.env.MAILJET_API_KEY;
+const MAILJET_API_SECRET = process.env.MAILJET_API_SECRET;
+const MAILJET_FROM_EMAIL = process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com';
 
-// Initialize SendGrid if API key is provided
-let sendgrid = null;
-if (useSendGrid) {
-  try {
-    sendgrid = require('@sendgrid/mail');
-    sendgrid.setApiKey(process.env.SENDGRID_API_KEY);
-    console.log('✅ SendGrid API configured (100 emails/day free)');
-  } catch (error) {
-    console.log('⚠️  SendGrid package not installed. Run: npm install @sendgrid/mail');
-  }
-}
-
-// Initialize Mailjet if API keys are provided (6,000 emails/month free!)
-let mailjet = null;
-if (useMailjet) {
-  try {
-    const Mailjet = require('node-mailjet');
-    mailjet = Mailjet.apiConnect(
-      process.env.MAILJET_API_KEY,
-      process.env.MAILJET_API_SECRET
-    );
-    console.log('✅ Mailjet API configured (6,000 emails/month free!)');
-    console.log('   API Key:', process.env.MAILJET_API_KEY.substring(0, 8) + '...');
-  } catch (error) {
-    console.log('⚠️  Mailjet initialization failed:');
-    console.log('   Error:', error.message);
-    console.log('   Check: Is node-mailjet package installed?');
-    console.log('   Run: npm install node-mailjet');
-    console.log('   Or check if API keys are correct');
-  }
-}
+// Check if Mailjet is configured
+const isEmailConfigured = !!(MAILJET_API_KEY && MAILJET_API_SECRET);
 
 // Debug: Log email configuration status
 console.log('\n📧 Email Configuration Check:');
-if (useMailjet) {
-  console.log('   Method: Mailjet API (6,000 emails/month free!)');
-  console.log('   MAILJET_API_KEY:', process.env.MAILJET_API_KEY ? '✅ Set' : '❌ Not set');
-  console.log('   MAILJET_API_SECRET:', process.env.MAILJET_API_SECRET ? '✅ Set' : '❌ Not set');
-} else if (useSendGrid) {
-  console.log('   Method: SendGrid API (100 emails/day free)');
-  console.log('   SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? '✅ Set' : '❌ Not set');
-} else {
-  console.log('   Method: SMTP (may be blocked on Render free tier)');
-  console.log('   EMAIL_HOST:', process.env.EMAIL_HOST || 'smtp.gmail.com (default)');
-  console.log('   EMAIL_PORT:', process.env.EMAIL_PORT || '587 (default)');
-  console.log('   EMAIL_USER:', process.env.EMAIL_USER ? '✅ Set' : '❌ Not set');
-  console.log('   EMAIL_PASS:', process.env.EMAIL_PASS ? '✅ Set' : '❌ Not set');
-}
-console.log('   Configured:', isEmailConfigured ? '✅ Yes' : '❌ No');
-
-// Create transporter for sending emails (only if configured)
-let transporter = null;
-let transporterReady = false;
-let transporterError = null;
-
 if (isEmailConfigured) {
-  // Try port 465 (SSL) first, fallback to 587 (TLS)
-  const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
-  const useSSL = emailPort === 465;
-  
-  transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: emailPort,
-    secure: useSSL, // true for 465 (SSL), false for 587 (TLS)
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    },
-    // Increased timeouts for Render network
-    connectionTimeout: 30000, // 30 seconds (increased from 10)
-    greetingTimeout: 30000,   // 30 seconds
-    socketTimeout: 30000,     // 30 seconds
-    // Additional options for better connection
-    tls: {
-      rejectUnauthorized: false // Allow self-signed certificates if needed
-    },
-    // Retry configuration
-    pool: false,
-    maxConnections: 1,
-    maxMessages: 1
-  });
-
-  // Verify transporter configuration (async to not block server start)
-  transporter.verify(function (error, success) {
-    if (error) {
-      transporterError = error;
-      transporterReady = false;
-      console.log('⚠️  Email transporter verification failed:');
-      console.log('   Error:', error.message);
-      console.log('   Code:', error.code);
-      if (error.response) {
-        console.log('   Response:', error.response);
-      }
-      if (error.responseCode) {
-        console.log('   Response Code:', error.responseCode);
-      }
-      console.log('📧 Email sending will be attempted but may fail.');
-      console.log('💡 Check: EMAIL_USER, EMAIL_PASS, EMAIL_HOST, EMAIL_PORT in environment variables');
-      console.log('💡 For Gmail: Use App Password (not regular password) - https://myaccount.google.com/apppasswords');
-      if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-        console.log('💡 Connection timeout detected! Try these fixes:');
-        console.log('   1. Change EMAIL_PORT to 465 (SSL) instead of 587 (TLS)');
-        console.log('   2. Render free tier may block SMTP - consider upgrading or using email service');
-        console.log('   3. Check if Gmail is blocking Render IP addresses');
-      }
-      // Don't disable transporter - let it try to send anyway
-    } else {
-      transporterReady = true;
-      transporterError = null;
-      console.log('✅ Email server is ready to send messages');
-      console.log('   Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
-      console.log('   Port:', process.env.EMAIL_PORT || '587');
-      console.log('   User:', process.env.EMAIL_USER);
-    }
-  });
+  console.log('   Method: Mailjet API (6,000 emails/month free!)');
+  console.log('   MAILJET_API_KEY:', MAILJET_API_KEY ? '✅ Set (' + MAILJET_API_KEY.substring(0, 8) + '...)' : '❌ Not set');
+  console.log('   MAILJET_API_SECRET:', MAILJET_API_SECRET ? '✅ Set' : '❌ Not set');
+  console.log('   From Email:', MAILJET_FROM_EMAIL);
+  console.log('   Configured: ✅ Yes');
 } else {
-  console.log('📧 Email not configured. Verification codes will be logged to console.');
-  console.log('   To enable email, set EMAIL_USER and EMAIL_PASS in .env file');
+  console.log('   Method: Mailjet API');
+  console.log('   MAILJET_API_KEY:', MAILJET_API_KEY ? '✅ Set' : '❌ Not set');
+  console.log('   MAILJET_API_SECRET:', MAILJET_API_SECRET ? '✅ Set' : '❌ Not set');
+  console.log('   Configured: ❌ No');
+  console.log('   💡 To enable: Set MAILJET_API_KEY and MAILJET_API_SECRET in environment variables');
 }
 
 /**
- * Send verification code to user's email
- * If email is not configured, logs to console instead
+ * Send verification code to user's email using Mailjet REST API
+ * Uses Basic Auth with API Key as username and Secret as password
  * @param {string} email - Recipient email
  * @param {string} code - Verification code
  * @returns {Promise}
  */
 const sendVerificationCode = async (email, code) => {
-  // If email is not configured, just log to console
+  // If Mailjet is not configured, log to console
   if (!isEmailConfigured) {
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('📧 VERIFICATION CODE (Email not configured)');
+    console.log('📧 VERIFICATION CODE (Mailjet not configured)');
     console.log('═══════════════════════════════════════════════════════');
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);
     console.log('═══════════════════════════════════════════════════════');
-    console.log('💡 To enable email (all FREE options):');
-    console.log('   Option 1: Mailjet (6,000 emails/month) - Set MAILJET_API_KEY & MAILJET_API_SECRET');
-    console.log('   Option 2: SendGrid (100 emails/day) - Set SENDGRID_API_KEY');
-    console.log('   Option 3: SMTP (may be blocked on Render) - Set EMAIL_USER & EMAIL_PASS');
+    console.log('💡 To enable email:');
+    console.log('   Set MAILJET_API_KEY and MAILJET_API_SECRET in Render environment variables');
+    console.log('   Get keys from: https://app.mailjet.com/account/api_keys');
     console.log('═══════════════════════════════════════════════════════\n');
     return { success: true, messageId: 'console-log' };
   }
 
-  // Try Mailjet first (most free emails - 6,000/month!)
-  if (useMailjet) {
-    if (!mailjet) {
-      console.error('❌ Mailjet API keys set but mailjet not initialized!');
-      console.error('   Check: Is node-mailjet package installed?');
-      console.error('   Run: npm install node-mailjet');
-    } else {
-      try {
-        console.log('📤 Sending email via Mailjet API...');
-        console.log('   API Key:', process.env.MAILJET_API_KEY ? '✅ Set' : '❌ Not set');
-        console.log('   API Secret:', process.env.MAILJET_API_SECRET ? '✅ Set' : '❌ Not set');
-        console.log('   From:', process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
-        console.log('   To:', email);
-      
-        const fromEmail = process.env.MAILJET_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com';
-        
-        const request = mailjet.post('send', { version: 'v3.1' }).request({
-          Messages: [{
-            From: {
-              Email: fromEmail,
-              Name: 'UniDeals'
-            },
-            To: [{
-              Email: email
-            }],
-            Subject: 'UniDeals - Email Verification Code',
-            HTMLPart: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #4CAF50;">UniDeals Verification</h2>
-                <p>Thank you for registering with UniDeals!</p>
-                <p>Your verification code is:</p>
-                <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-                  <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
-                </div>
-                <p>This code will expire in 10 minutes.</p>
-                <p>If you didn't request this code, please ignore this email.</p>
-              </div>
-            `
-          }]
-        });
+  try {
+    console.log('📤 Sending email via Mailjet REST API...');
+    console.log('   API Endpoint: https://api.mailjet.com/v3.1/send');
+    console.log('   From:', MAILJET_FROM_EMAIL);
+    console.log('   To:', email);
+    console.log('   Code:', code);
 
-        const result = await request;
-        
-        console.log('✅ Verification email sent via Mailjet!');
-        console.log('   Response:', JSON.stringify(result.body, null, 2));
-        if (result.body.Messages && result.body.Messages[0]) {
-          console.log('   Status:', result.body.Messages[0].Status || 'sent');
-          const messageId = result.body.Messages[0].To && result.body.Messages[0].To[0] 
-            ? result.body.Messages[0].To[0].MessageID 
-            : 'mailjet-success';
-          return { success: true, messageId: messageId };
-        }
-        return { success: true, messageId: 'mailjet-success' };
-      } catch (error) {
-        console.error('❌ Error sending email via Mailjet:');
-        console.error('   Error Message:', error.message);
-        console.error('   Error Type:', error.name || 'Unknown');
-        
-        // Check if it's a JSON parse error (HTML response)
-        if (error.message && error.message.includes('Unexpected token')) {
-          console.error('   ⚠️  Received HTML instead of JSON - API endpoint or authentication issue!');
-          console.error('   Possible causes:');
-          console.error('   1. Invalid API keys');
-          console.error('   2. Sender email not verified in Mailjet');
-          console.error('   3. API endpoint issue');
-        }
-        
-        if (error.statusCode) {
-          console.error('   Status Code:', error.statusCode);
-        }
-        if (error.statusText) {
-          console.error('   Status Text:', error.statusText);
-        }
-        if (error.response) {
-          console.error('   Response Type:', typeof error.response);
-          if (typeof error.response === 'string') {
-            console.error('   Response (first 500 chars):', error.response.substring(0, 500));
-          } else if (error.response.body) {
-            try {
-              console.error('   Response Body:', JSON.stringify(error.response.body, null, 2));
-            } catch (e) {
-              console.error('   Response Body (raw):', error.response.body);
-            }
-          }
-        }
-        if (error.stack) {
-          console.error('   Stack:', error.stack.substring(0, 300));
-        }
-        console.log('⚠️  Mailjet failed, trying SendGrid or SMTP...');
-        // Return error info for debugging
-        return { 
-          success: false, 
-          messageId: 'mailjet-failed',
-          error: error.message,
-          errorDetails: error.response ? 'Check logs for full error' : error.message
-        };
+    // Create Basic Auth header (API Key as username, Secret as password)
+    const authString = Buffer.from(`${MAILJET_API_KEY}:${MAILJET_API_SECRET}`).toString('base64');
+
+    // Mailjet API v3.1 send endpoint
+    const response = await fetch('https://api.mailjet.com/v3.1/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${authString}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        Messages: [{
+          From: {
+            Email: MAILJET_FROM_EMAIL,
+            Name: 'UniDeals'
+          },
+          To: [{
+            Email: email
+          }],
+          Subject: 'UniDeals - Email Verification Code',
+          HTMLPart: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #4CAF50;">UniDeals Verification</h2>
+              <p>Thank you for registering with UniDeals!</p>
+              <p>Your verification code is:</p>
+              <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
+                <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
+              </div>
+              <p>This code will expire in 10 minutes.</p>
+              <p>If you didn't request this code, please ignore this email.</p>
+            </div>
+          `
+        }]
+      })
+    });
+
+    // Parse response
+    const result = await response.json();
+
+    if (!response.ok) {
+      // Error response from Mailjet
+      console.error('❌ Mailjet API Error:');
+      console.error('   Status:', response.status, response.statusText);
+      console.error('   Response:', JSON.stringify(result, null, 2));
+      
+      // Common error messages
+      if (result.ErrorMessage) {
+        console.error('   Error Message:', result.ErrorMessage);
       }
-    } else {
-      console.log('⚠️  Mailjet API keys set but mailjet not initialized!');
-      console.log('   Check: Is node-mailjet package installed?');
+      if (result.ErrorInfo) {
+        console.error('   Error Info:', result.ErrorInfo);
+      }
+      
+      // Check for common issues
+      if (response.status === 401) {
+        console.error('   💡 Issue: Invalid API credentials. Check MAILJET_API_KEY and MAILJET_API_SECRET');
+      } else if (response.status === 400) {
+        console.error('   💡 Issue: Bad request. Check if sender email is verified in Mailjet');
+        console.error('   💡 Verify sender: https://app.mailjet.com/account/sender');
+      }
+      
+      // Fallback to console logging
+      console.log('\n═══════════════════════════════════════════════════════');
+      console.log('📧 VERIFICATION CODE (Mailjet API failed - using console)');
+      console.log('═══════════════════════════════════════════════════════');
+      console.log(`Email: ${email}`);
+      console.log(`Verification Code: ${code}`);
+      console.log('═══════════════════════════════════════════════════════\n');
+      
       return { 
         success: false, 
-        messageId: 'mailjet-not-initialized',
-        error: 'Mailjet package not installed or initialization failed'
+        messageId: 'mailjet-api-failed',
+        error: result.ErrorMessage || `HTTP ${response.status}: ${response.statusText}`
       };
     }
-  } else {
-    console.log('ℹ️  Mailjet not configured. useMailjet:', useMailjet, 'mailjet:', !!mailjet);
-    console.log('   MAILJET_API_KEY:', process.env.MAILJET_API_KEY ? 'Set' : 'Not set');
-    console.log('   MAILJET_API_SECRET:', process.env.MAILJET_API_SECRET ? 'Set' : 'Not set');
-  }
 
-  // Try SendGrid second (works on Render free tier)
-  if (useSendGrid && sendgrid) {
-    try {
-      console.log('📤 Sending email via SendGrid API...');
-      console.log('   From:', process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com');
-      console.log('   To:', email);
-      
-      const msg = {
-        to: email,
-        from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER || 'noreply@unideals.com',
-        subject: 'UniDeals - Email Verification Code',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #4CAF50;">UniDeals Verification</h2>
-            <p>Thank you for registering with UniDeals!</p>
-            <p>Your verification code is:</p>
-            <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-              <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
-            </div>
-            <p>This code will expire in 10 minutes.</p>
-            <p>If you didn't request this code, please ignore this email.</p>
-          </div>
-        `
+    // Success!
+    console.log('✅ Verification email sent via Mailjet!');
+    console.log('   Status:', response.status);
+    if (result.Messages && result.Messages[0]) {
+      console.log('   Message ID:', result.Messages[0].To[0].MessageID || 'N/A');
+      console.log('   Status:', result.Messages[0].Status || 'sent');
+      return { 
+        success: true, 
+        messageId: result.Messages[0].To[0].MessageID || 'mailjet-success'
       };
-
-      const response = await sendgrid.send(msg);
-      console.log('✅ Verification email sent via SendGrid!');
-      console.log('   Status Code:', response[0].statusCode);
-      console.log('   Message ID:', response[0].headers['x-message-id'] || 'N/A');
-      console.log('   To:', email);
-      return { success: true, messageId: response[0].headers['x-message-id'] || 'sendgrid-success' };
-    } catch (error) {
-      console.error('❌ Error sending email via SendGrid:');
-      console.error('   Error:', error.message);
-      if (error.response) {
-        console.error('   Status Code:', error.response.statusCode);
-        console.error('   Body:', JSON.stringify(error.response.body, null, 2));
-      }
-      // Fall through to SMTP or console logging
-      console.log('⚠️  SendGrid failed, trying SMTP or console logging...');
-    }
-  }
-  
-  // If transporter is null but email is configured, try to create it
-  if (!transporter && isEmailConfigured) {
-    console.log('⚠️  Transporter not initialized, attempting to create...');
-    const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
-    const useSSL = emailPort === 465;
-    
-    transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-      port: emailPort,
-      secure: useSSL,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      },
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 30000,
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-  }
-  
-  // Log transporter status
-  if (transporter) {
-    console.log('   Transporter Status:', transporterReady ? '✅ Ready' : '⏳ Not verified yet');
-    if (transporterError) {
-      console.log('   Previous Verification Error:', transporterError.message);
-    }
-  }
-
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: email,
-    subject: 'UniDeals - Email Verification Code',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #4CAF50;">UniDeals Verification</h2>
-        <p>Thank you for registering with UniDeals!</p>
-        <p>Your verification code is:</p>
-        <div style="background-color: #f4f4f4; padding: 20px; text-align: center; margin: 20px 0;">
-          <h1 style="color: #4CAF50; margin: 0; font-size: 32px; letter-spacing: 5px;">${code}</h1>
-        </div>
-        <p>This code will expire in 10 minutes.</p>
-        <p>If you didn't request this code, please ignore this email.</p>
-      </div>
-    `
-  };
-
-  try {
-    // Verify transporter is ready before sending
-    if (!transporter) {
-      throw new Error('Email transporter not initialized');
     }
     
-    console.log('📤 Attempting to send email via SMTP...');
-    console.log('   SMTP Host:', process.env.EMAIL_HOST || 'smtp.gmail.com');
-    console.log('   SMTP Port:', process.env.EMAIL_PORT || '587');
-    console.log('   Secure (SSL):', parseInt(process.env.EMAIL_PORT) === 465 ? 'Yes' : 'No (TLS)');
-    console.log('   From:', process.env.EMAIL_USER);
-    console.log('   To:', email);
-    console.log('   Connection Timeout: 30 seconds');
-    
-    const info = await transporter.sendMail(mailOptions);
-    console.log('✅ Verification email sent successfully!');
-    console.log('   Message ID:', info.messageId);
-    console.log('   Response:', info.response || 'N/A');
-    console.log('   To:', email);
-    return { success: true, messageId: info.messageId };
+    return { success: true, messageId: 'mailjet-success' };
+
   } catch (error) {
-    console.error('❌ Error sending verification email:');
+    console.error('❌ Error sending email via Mailjet API:');
     console.error('   Error Message:', error.message);
-    console.error('   Error Code:', error.code);
-    if (error.response) {
-      console.error('   SMTP Response:', error.response);
-    }
-    if (error.responseCode) {
-      console.error('   Response Code:', error.responseCode);
-    }
-    if (error.command) {
-      console.error('   Failed Command:', error.command);
+    console.error('   Error Type:', error.name || 'Unknown');
+    
+    if (error.code) {
+      console.error('   Error Code:', error.code);
     }
     
-    // Log full error for debugging (safely handle circular references)
-    try {
-      const errorDetails = {
-        message: error.message,
-        code: error.code,
-        response: error.response,
-        responseCode: error.responseCode,
-        command: error.command,
-        stack: error.stack
-      };
-      console.error('   Error Details:', JSON.stringify(errorDetails, null, 2));
-    } catch (stringifyError) {
-      console.error('   Error (could not stringify):', error.message);
+    // Network errors
+    if (error.message.includes('fetch')) {
+      console.error('   💡 Issue: Network error. Check internet connection or Render network settings');
     }
     
-    // Fallback to console logging if email fails
+    // Fallback to console logging
     console.log('\n═══════════════════════════════════════════════════════');
-    console.log('📧 VERIFICATION CODE (Email sending failed - using console)');
+    console.log('📧 VERIFICATION CODE (Mailjet API error - using console)');
     console.log('═══════════════════════════════════════════════════════');
     console.log(`Email: ${email}`);
     console.log(`Verification Code: ${code}`);
     console.log('═══════════════════════════════════════════════════════');
     console.log('💡 Troubleshooting:');
-    console.log('   1. Check EMAIL_USER and EMAIL_PASS are set correctly');
-    console.log('   2. For Gmail, use App Password (not regular password)');
-    console.log('   3. Check if 2-Step Verification is enabled');
-    console.log('   4. Verify SMTP settings (host, port)');
+    console.log('   1. Check MAILJET_API_KEY and MAILJET_API_SECRET are correct');
+    console.log('   2. Verify sender email in Mailjet: https://app.mailjet.com/account/sender');
+    console.log('   3. Check Render logs for detailed error messages');
     console.log('═══════════════════════════════════════════════════════\n');
-    return { success: true, messageId: 'console-log-fallback' };
+    
+    return { 
+      success: false, 
+      messageId: 'mailjet-error',
+      error: error.message
+    };
   }
 };
 
 module.exports = {
-  transporter,
   sendVerificationCode
 };
-

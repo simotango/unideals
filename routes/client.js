@@ -53,20 +53,9 @@ router.post('/register', async (req, res) => {
       client = await Client.create(email, verificationCode, codeExpiresAt);
     }
 
-    // Check email configuration (SMTP, SendGrid, or Mailjet)
-    const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS) ||
-                            !!process.env.SENDGRID_API_KEY ||
-                            !!(process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
-    
-    // Determine which service is configured
-    let emailService = 'None';
-    if (process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET) {
-      emailService = 'Mailjet';
-    } else if (process.env.SENDGRID_API_KEY) {
-      emailService = 'SendGrid';
-    } else if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
-      emailService = 'SMTP';
-    }
+    // Check Mailjet configuration
+    const emailConfigured = !!(process.env.MAILJET_API_KEY && process.env.MAILJET_API_SECRET);
+    const emailService = emailConfigured ? 'Mailjet' : 'None';
     
     // Send verification email
     console.log('\n📧 Sending verification email...');
